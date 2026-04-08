@@ -232,32 +232,11 @@ function doGet(e) {
       var data = JSON.parse(e.parameter.payload);
       result = handleSave(data);
 
-    } else if (action === "ocrChunk") {
-      // Receive one chunk of base64 image
-      var chunkId = e.parameter.id;
-      var chunkIdx = e.parameter.i;
-      var chunkData = e.parameter.d;
-      CacheService.getScriptCache().put("ocrchunk_" + chunkId + "_" + chunkIdx, chunkData, 300);
-      result = { success: true, chunk: Number(chunkIdx) };
-
-    } else if (action === "ocrProcess") {
-      // Reassemble chunks and run OCR
-      var ocrId = e.parameter.id;
-      var numChunks = parseInt(e.parameter.n);
-      var mediaType = e.parameter.mt || "image/jpeg";
-      var cache = CacheService.getScriptCache();
-      var b64 = "";
-      for (var ci = 0; ci < numChunks; ci++) {
-        var key = "ocrchunk_" + ocrId + "_" + ci;
-        var chunk = cache.get(key);
-        if (chunk) { b64 += chunk; cache.remove(key); }
-      }
-      if (b64.length === 0) {
-        result = { success: false, message: "No se recibieron datos de imagen" };
-      } else {
-        var ocrResult = ocrTicket(b64, mediaType);
-        result = { success: !ocrResult.error, data: ocrResult };
-      }
+    } else if (action === "ocr") {
+      // OCR in a single GET request
+      var ocrData = JSON.parse(e.parameter.payload);
+      var ocrResult = ocrTicket(ocrData.base64Image, ocrData.mediaType || "image/jpeg");
+      result = { success: !ocrResult.error, data: ocrResult };
 
     } else {
       result = { success: true, message: "Control de Combustible API activa", version: "2.0" };

@@ -174,49 +174,13 @@ function apiSave(data) {
     });
 }
 
-// OCR: Send image in chunks via GET (bypasses CORS completely)
-function apiOcr(base64, mediaType, onProgress) {
-  var requestId = "r" + Date.now();
-  var chunkSize = 5000;
-  var chunks = [];
-  for (var i = 0; i < base64.length; i += chunkSize) {
-    chunks.push(base64.substr(i, chunkSize));
-  }
-  var total = chunks.length;
-
-  if (onProgress) onProgress("Subiendo imagen (" + total + " partes)...");
-
-  // Send chunks sequentially to avoid overwhelming GAS
-  var uploaded = 0;
-  function sendChunk(idx) {
-    if (idx >= total) {
-      if (onProgress) onProgress("Leyendo ticket con IA...");
-      // All chunks sent — trigger OCR processing
-      var processUrl = API + "?action=ocrProcess&id=" + requestId + "&n=" + total + "&mt=" + encodeURIComponent(mediaType);
-      return fetch(processUrl, { redirect: "follow" })
-        .then(function(r) { return r.json(); })
-        .catch(function(e) {
-          return { success: false, message: "Error procesando: " + e.toString() };
-        });
-    }
-
-    var url = API + "?action=ocrChunk&id=" + requestId + "&i=" + idx + "&d=" + encodeURIComponent(chunks[idx]);
-    return fetch(url, { redirect: "follow" })
-      .then(function(r) { return r.json(); })
-      .then(function(r) {
-        if (!r || !r.success) {
-          return { success: false, message: "Error subiendo parte " + idx };
-        }
-        uploaded++;
-        if (onProgress) onProgress("Subiendo... (" + uploaded + "/" + total + ")");
-        return sendChunk(idx + 1);
-      })
-      .catch(function(e) {
-        return { success: false, message: "Error en parte " + idx + ": " + e.toString() };
-      });
-  }
-
-  return sendChunk(0);
+// OCR: Single GET request with compressed image
+function apiOcr(base64, mediaType) {
+  var payload = encodeURIComponent(JSON.stringify({ base64Image: base64, mediaType: mediaType }));
+  var url = API + "?action=ocr&payload=" + payload;
+  return fetch(url, { redirect: "follow" })
+    .then(function(r) { return r.json(); })
+    .catch(function(e) { console.error("OCR error:", e); return { success: false, message: e.toString() }; });
 }
 
 // ═══════════════════════════════════════
@@ -338,17 +302,11 @@ function handleVehiclePhoto(input) {
 
     // Show scanning state
     $("v-scan-status").className = "scan-status scan-scanning";
-    $("v-scan-status").innerHTML = '<div class="scan-title">Comprimiendo imagen...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
+    $("v-scan-status").innerHTML = '<div class="scan-title">Leyendo ticket...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
 
-    // Compress for OCR
-    compressImage(dataUrl, 800, 0.5, function(compressedB64, compressedType) {
-      var numChunks = Math.ceil(compressedB64.length / 5000);
-      $("v-scan-status").innerHTML = '<div class="scan-title">Subiendo ' + numChunks + ' partes... (0/' + numChunks + ')</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
-
-      apiOcr(compressedB64, compressedType, function(progress) {
-        // Progress callback
-        $("v-scan-status").innerHTML = '<div class="scan-title">' + progress + '</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
-      }).then(function(r) {
+    // Compress and send to OCR in a single request
+    compressImage(dataUrl, 640, 0.4, function(compressedB64, compressedType) {
+      apiOcr(compressedB64, compressedType).then(function(r) {
         if (r && r.success && r.data) {
           vState.ticketData = r.data;
           $("v-scan-status").className = "scan-status scan-ok";
