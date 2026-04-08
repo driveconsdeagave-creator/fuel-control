@@ -176,7 +176,7 @@ function apiSave(data) {
 
 // OCR: Call Gemini API directly from browser (supports CORS, no GAS needed)
 var GEMINI_KEY = ""; // se carga de GAS al inicio
-var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 function apiOcr(base64, mediaType) {
   if (!GEMINI_KEY) {
