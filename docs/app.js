@@ -4,7 +4,7 @@
 
 // ── CONFIGURACION ──
 // >>> ACTUALIZA ESTA URL despues de re-desplegar el Apps Script v2 <<<
-var API = "https://script.google.com/macros/s/AKfycbxBiR3kIB0yN0-0DEJFqrfF__P2zgl3EACeYG2BnIy12P0vBr5YhK96RIx6mcppaPqs/exec";
+var API = "https://script.google.com/macros/s/AKfycbyMrV0iE4f45VtmBX-w32gS8XNDC0F_T7NDfngCIxOOJiEkRJRN4kporHZzDbFpsXT-/exec";
 
 // ── CATALOGOS ──
 var VEHICLES = [
