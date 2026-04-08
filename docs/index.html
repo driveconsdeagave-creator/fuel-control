@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#d4a437">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Control de Combustible</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ═══ PANTALLA: Seleccionar Rol ═══ -->
+  <div id="screen-role" class="screen active">
+    <div class="role-container">
+      <div class="role-logo">&#9981;</div>
+      <h1 class="role-title">Control de Combustible</h1>
+      <p class="role-subtitle">Sistema de Gestion Agricola</p>
+      <div class="role-buttons">
+        <button class="role-btn role-btn--primary" onclick="selectRole('vehicle')">
+          <span class="role-btn-icon">&#x1F69B;</span>
+          <div><div class="role-btn-title">Carga Vehiculo</div><div class="role-btn-desc">Camionetas y pickups</div></div>
+        </button>
+        <button class="role-btn role-btn--primary" onclick="selectRole('tractor')">
+          <span class="role-btn-icon">&#x1F69C;</span>
+          <div><div class="role-btn-title">Carga Tractor</div><div class="role-btn-desc">Tractores agricolas</div></div>
+        </button>
+        <button class="role-btn role-btn--secondary" onclick="showPinDialog()">
+          <span class="role-btn-icon">&#x1F4CA;</span>
+          <div><div class="role-btn-title">Administrador</div><div class="role-btn-desc">Ver Google Sheets</div></div>
+        </button>
+      </div>
+      <!-- PIN dialog -->
+      <div id="pin-dialog" class="pin-dialog hidden">
+        <div class="pin-label">PIN de administrador</div>
+        <input type="password" id="pin-input" inputmode="numeric" maxlength="6" placeholder="----" class="pin-input" onkeydown="if(event.key==='Enter')tryPin()">
+        <div id="pin-error" class="pin-error hidden">PIN incorrecto</div>
+        <div class="pin-actions">
+          <button class="btn btn--outline" onclick="hidePinDialog()">Cancelar</button>
+          <button class="btn btn--gold" onclick="tryPin()">Entrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PANTALLA: Operador Vehiculo ═══ -->
+  <div id="screen-vehicle" class="screen">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-icon">&#x1F69B;</span>
+        <div><div class="topbar-title">Carga Vehiculo</div><div class="topbar-sub">Control de Combustible</div></div>
+      </div>
+      <button class="btn btn--outline btn--sm" onclick="goHome()">Salir</button>
+    </header>
+    <div class="content">
+      <!-- Paso 1: Operador y vehiculo -->
+      <div class="card fade-up">
+        <div class="step-header"><div class="step-num">1</div><div class="step-title">Quien eres y que camioneta?</div></div>
+        <div class="form-group">
+          <label class="label">Tu nombre</label>
+          <select id="v-operator" class="input" onchange="vehicleStep1Check()"><option value="">Selecciona...</option></select>
+        </div>
+        <div class="form-group">
+          <label class="label">Camioneta</label>
+          <select id="v-vehicle" class="input" onchange="onVehicleChange()"><option value="">Selecciona...</option></select>
+        </div>
+      </div>
+      <!-- Paso 2: Foto ticket -->
+      <div id="v-step2" class="card fade-up hidden">
+        <div class="step-header"><div class="step-num">2</div><div class="step-title">Foto del ticket</div></div>
+        <div id="v-photo-area" class="photo-area" onclick="document.getElementById('v-file').click()">
+          <input type="file" id="v-file" accept="image/*" capture="environment" style="display:none" onchange="handleVehiclePhoto(this)">
+          <div id="v-photo-empty" class="photo-empty">
+            <div class="photo-icon">&#x1F4F8;</div>
+            <div class="photo-cta">Toca para tomar foto</div>
+            <div class="photo-hint">La IA lee los datos automaticamente</div>
+          </div>
+          <div id="v-photo-preview" class="photo-preview hidden">
+            <img id="v-preview-img" class="photo-thumb" alt="ticket">
+            <div id="v-scan-status" class="scan-status"></div>
+          </div>
+        </div>
+        <button id="v-continue-btn" class="btn btn--gold btn--full hidden" onclick="vehicleGoStep3()">Continuar &rarr;</button>
+        <!-- Manual entry fallback -->
+        <button id="v-manual-btn" class="btn btn--outline btn--full mt-12" onclick="toggleManualEntry()" style="font-size:13px">Ingresar datos manualmente</button>
+        <div id="v-manual-fields" class="hidden mt-12">
+          <div class="form-row">
+            <div class="form-group"><label class="label">Gasolinera</label><input type="text" id="v-station" class="input" placeholder="Ej: Pemex Tala"></div>
+            <div class="form-group"><label class="label">Combustible</label>
+              <select id="v-fuelType" class="input"><option value="magna">Magna</option><option value="premium">Premium</option><option value="diesel">Diesel</option></select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="label">Litros</label><input type="number" id="v-liters" class="input" inputmode="decimal" step="0.1" placeholder="45.5"></div>
+            <div class="form-group"><label class="label">Precio/Litro</label><input type="number" id="v-price" class="input" inputmode="decimal" step="0.01" placeholder="24.51"></div>
+          </div>
+          <div class="form-group"><label class="label">Total $</label><input type="number" id="v-total" class="input" inputmode="decimal" step="0.01" placeholder="1115.25"></div>
+          <button class="btn btn--gold btn--full mt-12" onclick="applyManualVehicle()">Aplicar datos &rarr;</button>
+        </div>
+      </div>
+      <!-- Paso 3: Odometro -->
+      <div id="v-step3" class="card fade-up hidden">
+        <div class="step-header"><div class="step-num">3</div><div class="step-title">Km del odometro</div></div>
+        <div id="v-km-loading" class="info-box hidden">Consultando ultimo registro...</div>
+        <div id="v-km-prev-box" class="info-box info-box--green hidden">Ultimo registro: <strong id="v-km-prev-val"></strong></div>
+        <div id="v-km-first" class="info-box info-box--blue hidden">Primer registro de esta camioneta</div>
+        <div class="form-group">
+          <label class="label">Km actual</label>
+          <input type="number" id="v-km" class="input input--big" inputmode="numeric" placeholder="Ej: 85420" oninput="vehicleValidateKm()">
+        </div>
+        <div id="v-km-error" class="error-msg hidden"></div>
+        <div id="v-geo" class="geo-tag hidden"></div>
+        <button id="v-save-btn" class="btn btn--gold btn--full btn--lg mt-16" disabled onclick="saveVehicle()">Completa todos los pasos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PANTALLA: Operador Tractor ═══ -->
+  <div id="screen-tractor" class="screen">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-icon">&#x1F69C;</span>
+        <div><div class="topbar-title">Carga Tractor</div><div class="topbar-sub">Control de Combustible</div></div>
+      </div>
+      <button class="btn btn--outline btn--sm" onclick="goHome()">Salir</button>
+    </header>
+    <div class="content">
+      <!-- Paso 1 -->
+      <div class="card fade-up">
+        <div class="step-header"><div class="step-num">1</div><div class="step-title">Quien eres y que tractor?</div></div>
+        <div class="form-group">
+          <label class="label">Tu nombre</label>
+          <select id="t-operator" class="input" onchange="tractorStep1Check()"><option value="">Selecciona...</option></select>
+        </div>
+        <div class="form-group">
+          <label class="label">Tractor</label>
+          <select id="t-tractor" class="input" onchange="onTractorChange()"><option value="">Selecciona...</option></select>
+        </div>
+      </div>
+      <!-- Paso 2 -->
+      <div id="t-step2" class="card fade-up hidden">
+        <div class="step-header"><div class="step-num">2</div><div class="step-title">Combustible y horometro</div></div>
+        <div class="form-row">
+          <div class="form-group"><label class="label">Litros cargados</label><input type="number" id="t-liters" class="input" inputmode="decimal" step="0.1" placeholder="Ej: 45.5" oninput="tractorCalcTotal()"></div>
+          <div class="form-group"><label class="label">Precio diesel ($/L)</label><input type="number" id="t-price" class="input" inputmode="decimal" step="0.01" placeholder="Ej: 24.50" oninput="tractorCalcTotal()"></div>
+        </div>
+        <div id="t-total-box" class="cost-box hidden">
+          <span class="cost-label">Costo total</span>
+          <span id="t-total-val" class="cost-value"></span>
+        </div>
+        <div class="divider"></div>
+        <div id="t-hr-loading" class="info-box hidden">Consultando ultimo horometro...</div>
+        <div id="t-hr-prev-box" class="info-box info-box--green hidden">Ultimo horometro: <strong id="t-hr-prev-val"></strong></div>
+        <div id="t-hr-first" class="info-box info-box--blue hidden">Primer registro de este tractor</div>
+        <div class="form-group">
+          <label class="label">Horometro actual</label>
+          <input type="number" id="t-hr" class="input input--big" inputmode="decimal" step="0.1" placeholder="Ej: 1250.5" oninput="tractorValidateHr()">
+        </div>
+        <div id="t-hr-error" class="error-msg hidden"></div>
+        <div id="t-stats" class="stats-row hidden">
+          <div class="stat"><div class="stat-label">Hrs trabajadas</div><div id="t-stat-hrs" class="stat-val"></div></div>
+          <div class="stat"><div class="stat-label">Consumo</div><div id="t-stat-lph" class="stat-val stat-val--orange"></div></div>
+          <div class="stat"><div class="stat-label">Costo/hr</div><div id="t-stat-costhr" class="stat-val stat-val--blue"></div></div>
+        </div>
+        <div id="t-geo" class="geo-tag hidden"></div>
+        <button id="t-save-btn" class="btn btn--gold btn--full btn--lg mt-16" disabled onclick="saveTractor()">Completa todos los campos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PANTALLA: Admin ═══ -->
+  <div id="screen-admin" class="screen">
+    <div class="center-container">
+      <div class="admin-icon">&#x1F4CA;</div>
+      <h2 class="admin-title">Panel de Administrador</h2>
+      <p class="admin-desc">Todos los datos se guardan directamente en Google Sheets. Ahi puedes ver el historial completo, crear graficas, filtrar por vehiculo, operador o fecha, y ver las alertas de rendimiento.</p>
+      <p class="admin-legend"><span class="legend-green">Verde</span> = normal, <span class="legend-red">Rojo</span> = bajo rendimiento, <span class="legend-purple">Morado</span> = sospechoso.</p>
+      <a id="admin-sheets-link" href="https://docs.google.com/spreadsheets" target="_blank" rel="noopener" class="btn btn--gold btn--lg">Abrir Google Sheets</a>
+      <button class="btn btn--outline mt-16" onclick="goHome()">&larr; Volver</button>
+    </div>
+  </div>
+
+  <!-- ═══ PANTALLA: Exito ═══ -->
+  <div id="screen-success" class="screen">
+    <div class="center-container fade-up">
+      <div class="success-icon">&#x2705;</div>
+      <div class="success-title">Registro guardado!</div>
+      <div class="success-desc">Los datos ya estan en Google Sheets</div>
+      <div class="success-hint">Puedes registrar otra carga o salir</div>
+      <div class="success-actions">
+        <button class="btn btn--gold" id="success-new-btn">Nueva Carga</button>
+        <button class="btn btn--outline" onclick="goHome()">Salir</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
