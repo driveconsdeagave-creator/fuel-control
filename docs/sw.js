@@ -1,4 +1,4 @@
-var CACHE_NAME = "combustible-v1";
+var CACHE_NAME = "combustible-v2";
 var ASSETS = [
   "./",
   "./index.html",
@@ -25,8 +25,22 @@ self.addEventListener("activate", function(e) {
 });
 
 self.addEventListener("fetch", function(e) {
-  // Don't cache API calls
+  // Don't cache API calls to Google Apps Script
   if (e.request.url.includes("script.google.com")) return;
+  // Don't cache Google Fonts after initial load
+  if (e.request.url.includes("fonts.googleapis.com") || e.request.url.includes("fonts.gstatic.com")) {
+    e.respondWith(
+      caches.match(e.request).then(function(r) {
+        return r || fetch(e.request).then(function(resp) {
+          var clone = resp.clone();
+          caches.open(CACHE_NAME).then(function(c) { c.put(e.request, clone); });
+          return resp;
+        });
+      })
+    );
+    return;
+  }
+  // App shell: cache-first, fallback to network
   e.respondWith(
     caches.match(e.request).then(function(r) { return r || fetch(e.request); })
   );

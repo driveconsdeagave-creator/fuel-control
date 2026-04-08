@@ -139,6 +139,13 @@ input:focus, select:focus { border-color: rgba(212,164,55,0.45) !important; outl
 .success-hint { font-size: 13px; color: #5c5650; margin-bottom: 32px; }
 .success-actions { display: flex; gap: 12px; justify-content: center; }
 
+/* ═══ STATUS BAR ═══ */
+.status-bar { display: flex; align-items: center; gap: 8px; justify-content: center; margin-bottom: 12px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-dot.online { background: #6abf6a; box-shadow: 0 0 6px rgba(106,191,106,0.5); }
+.status-dot.offline { background: #d45050; box-shadow: 0 0 6px rgba(212,80,80,0.5); }
+.queue-badge { font-size: 11px; background: rgba(224,166,74,0.15); color: #e0a64a; padding: 3px 10px; border-radius: 12px; font-weight: 600; }
+
 /* ═══ SAVING OVERLAY ═══ */
 .saving-overlay { position: fixed; inset: 0; background: rgba(17,16,16,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .saving-spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #d4a437; border-radius: 50%; animation: spin .8s linear infinite; }

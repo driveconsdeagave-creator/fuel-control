@@ -58,6 +58,7 @@ var PIN = "2835";
 // ── STATE ──
 var vState = { kmPrev: null, loadingKm: false, isFirst: false, ticketData: null, geo: null };
 var tState = { hrPrev: null, loadingHr: false, isFirst: false, geo: null };
+var QUEUE_KEY = "fuel_pending_queue";
 
 // ═══════════════════════════════════════
 // UTILITIES
@@ -82,7 +83,70 @@ function getGeo() {
 }
 
 // ═══════════════════════════════════════
-// API — Todo via GET (evita CORS de POST)
+// OFFLINE QUEUE — guarda sin internet, sube cuando vuelve
+// ═══════════════════════════════════════
+function getQueue() {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY)) || []; }
+  catch(e) { return []; }
+}
+
+function saveQueue(q) {
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+  updateQueueBadge();
+}
+
+function addToQueue(data) {
+  var q = getQueue();
+  q.push({ data: data, ts: Date.now() });
+  saveQueue(q);
+}
+
+function updateQueueBadge() {
+  var q = getQueue();
+  var badge = $("queue-badge");
+  if (!badge) return;
+  if (q.length > 0) {
+    badge.textContent = q.length + " pendiente" + (q.length > 1 ? "s" : "");
+    show(badge);
+  } else {
+    hide(badge);
+  }
+}
+
+function updateOnlineStatus() {
+  var dot = $("status-dot");
+  if (!dot) return;
+  if (navigator.onLine) {
+    dot.className = "status-dot online";
+    dot.title = "Conectado";
+  } else {
+    dot.className = "status-dot offline";
+    dot.title = "Sin internet";
+  }
+}
+
+function syncQueue() {
+  var q = getQueue();
+  if (q.length === 0 || !navigator.onLine) return;
+
+  var item = q[0];
+  var payload = encodeURIComponent(JSON.stringify(item.data));
+  var url = API + "?action=save&payload=" + payload;
+
+  fetch(url, { redirect: "follow" })
+    .then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (r && r.success) {
+        q.shift();
+        saveQueue(q);
+        if (q.length > 0) setTimeout(syncQueue, 1000); // sync next
+      }
+    })
+    .catch(function() { /* retry later */ });
+}
+
+// ═══════════════════════════════════════
+// API — GET para reads y saves, Form POST para OCR
 // ═══════════════════════════════════════
 function apiGet(params) {
   var url = API + "?" + new URLSearchParams(params).toString();
@@ -92,19 +156,87 @@ function apiGet(params) {
 }
 
 function apiSave(data) {
+  // If offline, queue for later
+  if (!navigator.onLine) {
+    addToQueue(data);
+    return Promise.resolve({ success: true, queued: true });
+  }
+
   var payload = encodeURIComponent(JSON.stringify(data));
   var url = API + "?action=save&payload=" + payload;
   return fetch(url, { redirect: "follow" })
     .then(function(r) { return r.json(); })
-    .catch(function(e) { console.error("apiSave error:", e); return { success: false, message: e.toString() }; });
+    .catch(function(e) {
+      // Network error — queue it
+      console.error("apiSave error, queuing:", e);
+      addToQueue(data);
+      return { success: true, queued: true };
+    });
 }
 
+// OCR: POST via hidden form (bypasses CORS) + poll for result via GET
 function apiOcr(base64, mediaType) {
-  var payload = encodeURIComponent(JSON.stringify({ base64Image: base64, mediaType: mediaType }));
-  var url = API + "?action=ocr&payload=" + payload;
-  return fetch(url, { redirect: "follow" })
-    .then(function(r) { return r.json(); })
-    .catch(function(e) { console.error("apiOcr error:", e); return null; });
+  var requestId = "r" + Date.now() + Math.random().toString(36).substr(2, 6);
+
+  // Create hidden iframe + form to POST (no CORS restrictions on form submit)
+  var iframe = document.createElement("iframe");
+  iframe.name = "ocr_frame_" + requestId;
+  iframe.style.display = "none";
+  document.body.appendChild(iframe);
+
+  var form = document.createElement("form");
+  form.method = "POST";
+  form.action = API;
+  form.target = iframe.name;
+
+  var input = document.createElement("input");
+  input.type = "hidden";
+  input.name = "payload";
+  input.value = JSON.stringify({
+    action: "ocr",
+    requestId: requestId,
+    base64Image: base64,
+    mediaType: mediaType
+  });
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+
+  // Clean up form immediately, iframe after timeout
+  form.remove();
+  setTimeout(function() { iframe.remove(); }, 60000);
+
+  // Poll for OCR result via GET
+  return new Promise(function(resolve) {
+    var attempts = 0;
+    var maxAttempts = 30; // 30 * 2s = 60s max wait
+
+    function poll() {
+      attempts++;
+      if (attempts > maxAttempts) {
+        iframe.remove();
+        resolve(null);
+        return;
+      }
+
+      fetch(API + "?action=ocrResult&id=" + requestId, { redirect: "follow" })
+        .then(function(r) { return r.json(); })
+        .then(function(r) {
+          if (r && r.pending) {
+            setTimeout(poll, 2000); // still processing, try again
+          } else {
+            iframe.remove();
+            resolve(r);
+          }
+        })
+        .catch(function() {
+          setTimeout(poll, 3000);
+        });
+    }
+
+    // Wait 3s before first poll (give GAS time to process)
+    setTimeout(poll, 3000);
+  });
 }
 
 // ═══════════════════════════════════════
@@ -226,7 +358,7 @@ function handleVehiclePhoto(input) {
 
     // Show scanning state
     $("v-scan-status").className = "scan-status scan-scanning";
-    $("v-scan-status").innerHTML = '<div class="scan-title">Leyendo ticket...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
+    $("v-scan-status").innerHTML = '<div class="scan-title">Enviando a IA... (puede tardar 15-30s)</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
 
     // Compress and send to OCR
     compressImage(dataUrl, 800, 0.5, function(compressedB64, compressedType) {
@@ -368,7 +500,7 @@ function saveVehicle() {
   apiSave(data).then(function(r) {
     hideSaving();
     if (r && r.success) {
-      showSuccess("vehicle");
+      showSuccess("vehicle", r.queued);
     } else {
       alert("Error al guardar: " + (r ? r.message : "Sin respuesta del servidor"));
     }
@@ -519,7 +651,7 @@ function saveTractor() {
   apiSave(data).then(function(r) {
     hideSaving();
     if (r && r.success) {
-      showSuccess("tractor");
+      showSuccess("tractor", r.queued);
     } else {
       alert("Error al guardar: " + (r ? r.message : "Sin respuesta del servidor"));
     }
@@ -529,8 +661,15 @@ function saveTractor() {
 // ═══════════════════════════════════════
 // SUCCESS SCREEN
 // ═══════════════════════════════════════
-function showSuccess(type) {
+function showSuccess(type, wasQueued) {
   showScreen("screen-success");
+  if (wasQueued) {
+    $("screen-success").querySelector(".success-title").textContent = "Guardado en cola!";
+    $("screen-success").querySelector(".success-desc").textContent = "Se subira automaticamente cuando haya internet";
+  } else {
+    $("screen-success").querySelector(".success-title").textContent = "Registro guardado!";
+    $("screen-success").querySelector(".success-desc").textContent = "Los datos ya estan en Google Sheets";
+  }
   $("success-new-btn").onclick = function() {
     if (type === "vehicle") {
       resetVehicleForm();
@@ -630,4 +769,18 @@ document.addEventListener("DOMContentLoaded", function() {
   populateSelects();
   registerSW();
   showScreen("screen-role");
+
+  // Offline/Online handling
+  updateOnlineStatus();
+  updateQueueBadge();
+  window.addEventListener("online", function() {
+    updateOnlineStatus();
+    syncQueue();
+  });
+  window.addEventListener("offline", function() {
+    updateOnlineStatus();
+  });
+
+  // Sync any pending items on load
+  if (navigator.onLine) syncQueue();
 });

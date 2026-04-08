@@ -232,10 +232,17 @@ function doGet(e) {
       var data = JSON.parse(e.parameter.payload);
       result = handleSave(data);
 
-    } else if (action === "ocr") {
-      var data = JSON.parse(e.parameter.payload);
-      var ocrResult = ocrTicket(data.base64Image, data.mediaType || "image/jpeg");
-      result = { success: !ocrResult.error, data: ocrResult };
+    } else if (action === "ocrResult") {
+      // Poll for OCR result stored by doPost
+      var ocrId = e.parameter.id;
+      var cache = CacheService.getScriptCache();
+      var cached = cache.get("ocr_" + ocrId);
+      if (cached) {
+        result = JSON.parse(cached);
+        cache.remove("ocr_" + ocrId);
+      } else {
+        result = { success: false, pending: true, message: "Procesando..." };
+      }
 
     } else {
       result = { success: true, message: "Control de Combustible API activa", version: "2.0" };
@@ -253,7 +260,22 @@ function doGet(e) {
 // ══════════════════════════════════════
 function doPost(e) {
   try {
-    var data = JSON.parse(e.postData.contents);
+    // Handle form submissions (from hidden iframe) and JSON POST
+    var data;
+    if (e.parameter && e.parameter.payload) {
+      data = JSON.parse(e.parameter.payload);
+    } else {
+      data = JSON.parse(e.postData.contents);
+    }
+
+    // OCR via form POST — process and store result for polling
+    if (data.action === "ocr" && data.requestId) {
+      var ocrResult = ocrTicket(data.base64Image, data.mediaType || "image/jpeg");
+      var result = { success: !ocrResult.error, data: ocrResult };
+      CacheService.getScriptCache().put("ocr_" + data.requestId, JSON.stringify(result), 300);
+      return ContentService.createTextOutput(JSON.stringify(result))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
 
     if (data.action === "ocr") {
       var ocrResult = ocrTicket(data.base64Image, data.mediaType || "image/jpeg");
