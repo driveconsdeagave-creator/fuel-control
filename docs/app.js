@@ -174,32 +174,51 @@ function apiSave(data) {
     });
 }
 
-// OCR: GET request with compressed image
-// If image is too large for single GET, split into 2 sequential requests
-function apiOcr(base64, mediaType) {
-  var payload = JSON.stringify({ base64Image: base64, mediaType: mediaType });
-  var encoded = encodeURIComponent(payload);
+// OCR: Call Gemini API directly from browser (supports CORS, no GAS needed)
+var GEMINI_KEY = ""; // se carga de GAS al inicio
+var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-  // If small enough for a single GET (under 7KB URL), send directly
-  if (encoded.length < 7000) {
-    return fetch(API + "?action=ocr&payload=" + encoded, { redirect: "follow" })
-      .then(function(r) { return r.json(); })
-      .catch(function(e) { return { success: false, message: "Error de red: " + e.toString() }; });
+function apiOcr(base64, mediaType) {
+  if (!GEMINI_KEY) {
+    return Promise.resolve({ success: false, message: "API key no cargada. Recarga la app." });
   }
 
-  // Too large — split base64 in half and send as 2 requests
-  var id = "r" + Date.now();
-  var mid = Math.ceil(base64.length / 2);
-  var part1 = base64.substring(0, mid);
-  var part2 = base64.substring(mid);
-
-  return fetch(API + "?action=ocrPart&id=" + id + "&i=0&d=" + encodeURIComponent(part1), { redirect: "follow" })
-    .then(function(r) { return r.json(); })
-    .then(function() {
-      return fetch(API + "?action=ocrPart&id=" + id + "&i=1&n=2&mt=" + encodeURIComponent(mediaType) + "&d=" + encodeURIComponent(part2), { redirect: "follow" });
+  return fetch(GEMINI_URL + "?key=" + GEMINI_KEY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inlineData: { mimeType: mediaType, data: base64 } },
+          { text: 'Analiza este ticket de gasolinera mexicana. Responde SOLO JSON puro sin markdown:\n{"station":"nombre","liters":numero,"totalCost":numero,"pricePerLiter":numero,"date":"YYYY-MM-DD","time":"HH:MM","fuelType":"magna/premium/diesel"}\nCampo que no leas pon null. SOLO el JSON, nada mas.' }
+        ]
+      }]
     })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(r) {
+    if (r.error) {
+      return { success: false, message: "Gemini: " + (r.error.message || JSON.stringify(r.error)).substring(0, 200) };
+    }
+    try {
+      var text = r.candidates[0].content.parts[0].text || "";
+      var data = JSON.parse(text.replace(/```json|```/g, "").trim());
+      return { success: true, data: data };
+    } catch(e) {
+      return { success: false, message: "No se pudo leer el ticket" };
+    }
+  })
+  .catch(function(e) {
+    return { success: false, message: "Error de red: " + e.toString() };
+  });
+}
+
+// Load Gemini key from GAS on startup
+function loadGeminiKey() {
+  fetch(API + "?action=geminiKey", { redirect: "follow" })
     .then(function(r) { return r.json(); })
-    .catch(function(e) { return { success: false, message: "Error de red: " + e.toString() }; });
+    .then(function(r) { if (r && r.key) GEMINI_KEY = r.key; })
+    .catch(function() {});
 }
 
 // ═══════════════════════════════════════
@@ -324,7 +343,7 @@ function handleVehiclePhoto(input) {
     $("v-scan-status").innerHTML = '<div class="scan-title">Leyendo ticket...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
 
     // Compress and send to OCR in a single request
-    compressImage(dataUrl, 400, 0.3, function(compressedB64, compressedType) {
+    compressImage(dataUrl, 800, 0.5, function(compressedB64, compressedType) {
       apiOcr(compressedB64, compressedType).then(function(r) {
         if (r && r.success && r.data) {
           vState.ticketData = r.data;
@@ -741,6 +760,7 @@ function registerSW() {
 document.addEventListener("DOMContentLoaded", function() {
   populateSelects();
   registerSW();
+  loadGeminiKey();
   showScreen("screen-role");
 
   // Offline/Online handling

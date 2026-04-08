@@ -232,35 +232,13 @@ function doGet(e) {
       var data = JSON.parse(e.parameter.payload);
       result = handleSave(data);
 
-    } else if (action === "ocr") {
-      // OCR in a single GET request (small images)
-      var ocrData = JSON.parse(e.parameter.payload);
-      var ocrResult = ocrTicket(ocrData.base64Image, ocrData.mediaType || "image/jpeg");
-      result = { success: !ocrResult.error, data: ocrResult };
-
-    } else if (action === "ocrPart") {
-      // OCR split in 2 parts for larger images
-      var partId = e.parameter.id;
-      var partIdx = e.parameter.i;
-      var partData = e.parameter.d;
-      var cache = CacheService.getScriptCache();
-
-      if (partIdx === "0") {
-        // First part — just store it
-        cache.put("ocrpart_" + partId, partData, 120);
-        result = { success: true };
-      } else {
-        // Second part — combine and process
-        var firstPart = cache.get("ocrpart_" + partId) || "";
-        cache.remove("ocrpart_" + partId);
-        var fullB64 = firstPart + partData;
-        var mt = e.parameter.mt || "image/jpeg";
-        var ocrResult = ocrTicket(fullB64, mt);
-        result = { success: !ocrResult.error, data: ocrResult };
-      }
+    } else if (action === "geminiKey") {
+      // Deliver Gemini API key to frontend (browser calls Gemini directly)
+      var gk = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+      result = { key: gk || "" };
 
     } else {
-      result = { success: true, message: "Control de Combustible API activa", version: "2.0" };
+      result = { success: true, message: "Control de Combustible API activa", version: "3.0" };
     }
   } catch (err) {
     result = { success: false, message: err.toString() };
