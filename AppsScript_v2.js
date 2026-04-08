@@ -311,31 +311,26 @@ function doPost(e) {
 }
 
 // ══════════════════════════════════════
-// OCR — Lectura de tickets con Anthropic
+// OCR — Lectura de tickets con Gemini
 // ══════════════════════════════════════
 // Configurar API key:
 // Archivo -> Configuracion del proyecto -> Propiedades del script
-// Clave: ANTHROPIC_API_KEY   Valor: sk-ant-XXXXXXX
+// Clave: GEMINI_API_KEY   Valor: AIza...
 
 function ocrTicket(base64Image, mediaType) {
-  var apiKey = PropertiesService.getScriptProperties().getProperty("ANTHROPIC_API_KEY");
-  if (!apiKey) return { error: "API key no configurada" };
+  var apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+  if (!apiKey) return { error: "GEMINI_API_KEY no configurada en propiedades del script" };
 
-  var response = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", {
+  var url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + apiKey;
+
+  var response = UrlFetchApp.fetch(url, {
     method: "post",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
+    contentType: "application/json",
     payload: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: base64Image } },
-          { type: "text", text: 'Analiza este ticket de gasolinera mexicana. Responde SOLO JSON puro:\n{"station":"nombre","liters":numero,"totalCost":numero,"pricePerLiter":numero,"date":"YYYY-MM-DD","time":"HH:MM","fuelType":"magna/premium/diesel"}\nCampo que no leas pon null. SOLO JSON.' }
+      contents: [{
+        parts: [
+          { inlineData: { mimeType: mediaType, data: base64Image } },
+          { text: 'Analiza este ticket de gasolinera mexicana. Responde SOLO JSON puro sin markdown:\n{"station":"nombre","liters":numero,"totalCost":numero,"pricePerLiter":numero,"date":"YYYY-MM-DD","time":"HH:MM","fuelType":"magna/premium/diesel"}\nCampo que no leas pon null. SOLO el JSON, nada mas.' }
         ]
       }]
     }),
@@ -345,14 +340,13 @@ function ocrTicket(base64Image, mediaType) {
   var httpCode = response.getResponseCode();
   var rawText = response.getContentText();
 
-  // If Anthropic returned an HTTP error, show it
   if (httpCode !== 200) {
-    return { error: "Anthropic HTTP " + httpCode + ": " + rawText.substring(0, 300) };
+    return { error: "Gemini HTTP " + httpCode + ": " + rawText.substring(0, 300) };
   }
 
   try {
     var result = JSON.parse(rawText);
-    var text = (result.content || []).map(function(c) { return c.text || ""; }).join("");
+    var text = result.candidates[0].content.parts[0].text || "";
     return JSON.parse(text.replace(/```json|```/g, "").trim());
   } catch (err) {
     return { error: "Parse error: " + err.toString() + " | Response: " + rawText.substring(0, 200) };
