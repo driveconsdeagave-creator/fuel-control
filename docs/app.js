@@ -174,68 +174,40 @@ function apiSave(data) {
     });
 }
 
-// OCR: POST via hidden form (bypasses CORS) + poll for result via GET
+// OCR: Send image in chunks via GET (bypasses CORS completely)
+// 1. Split base64 into ~5KB chunks
+// 2. Upload all chunks in parallel via GET
+// 3. Trigger ocrProcess which reassembles + calls Anthropic
 function apiOcr(base64, mediaType) {
-  var requestId = "r" + Date.now() + Math.random().toString(36).substr(2, 6);
+  var requestId = "r" + Date.now();
+  var chunkSize = 5000;
+  var chunks = [];
+  for (var i = 0; i < base64.length; i += chunkSize) {
+    chunks.push(base64.substr(i, chunkSize));
+  }
 
-  // Create hidden iframe + form to POST (no CORS restrictions on form submit)
-  var iframe = document.createElement("iframe");
-  iframe.name = "ocr_frame_" + requestId;
-  iframe.style.display = "none";
-  document.body.appendChild(iframe);
+  console.log("OCR: sending " + chunks.length + " chunks (" + base64.length + " chars total)");
 
-  var form = document.createElement("form");
-  form.method = "POST";
-  form.action = API;
-  form.target = iframe.name;
-
-  var input = document.createElement("input");
-  input.type = "hidden";
-  input.name = "payload";
-  input.value = JSON.stringify({
-    action: "ocr",
-    requestId: requestId,
-    base64Image: base64,
-    mediaType: mediaType
+  // Send all chunks in parallel
+  var chunkPromises = chunks.map(function(chunk, idx) {
+    var url = API + "?action=ocrChunk&id=" + requestId + "&i=" + idx + "&d=" + encodeURIComponent(chunk);
+    return fetch(url, { redirect: "follow" })
+      .then(function(r) { return r.json(); })
+      .catch(function(e) { console.error("Chunk " + idx + " failed:", e); return null; });
   });
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
 
-  // Clean up form immediately, iframe after timeout
-  form.remove();
-  setTimeout(function() { iframe.remove(); }, 60000);
-
-  // Poll for OCR result via GET
-  return new Promise(function(resolve) {
-    var attempts = 0;
-    var maxAttempts = 30; // 30 * 2s = 60s max wait
-
-    function poll() {
-      attempts++;
-      if (attempts > maxAttempts) {
-        iframe.remove();
-        resolve(null);
-        return;
-      }
-
-      fetch(API + "?action=ocrResult&id=" + requestId, { redirect: "follow" })
-        .then(function(r) { return r.json(); })
-        .then(function(r) {
-          if (r && r.pending) {
-            setTimeout(poll, 2000); // still processing, try again
-          } else {
-            iframe.remove();
-            resolve(r);
-          }
-        })
-        .catch(function() {
-          setTimeout(poll, 3000);
-        });
+  // After all chunks uploaded, trigger OCR processing
+  return Promise.all(chunkPromises).then(function(results) {
+    var allOk = results.every(function(r) { return r && r.success; });
+    if (!allOk) {
+      console.error("Some chunks failed:", results);
+      return null;
     }
-
-    // Wait 3s before first poll (give GAS time to process)
-    setTimeout(poll, 3000);
+    console.log("OCR: all chunks sent, processing...");
+    var processUrl = API + "?action=ocrProcess&id=" + requestId + "&n=" + chunks.length + "&mt=" + encodeURIComponent(mediaType);
+    return fetch(processUrl, { redirect: "follow" })
+      .then(function(r) { return r.json(); })
+      .catch(function(e) { console.error("OCR process failed:", e); return null; });
   });
 }
 
@@ -360,8 +332,8 @@ function handleVehiclePhoto(input) {
     $("v-scan-status").className = "scan-status scan-scanning";
     $("v-scan-status").innerHTML = '<div class="scan-title">Enviando a IA... (puede tardar 15-30s)</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
 
-    // Compress and send to OCR
-    compressImage(dataUrl, 800, 0.5, function(compressedB64, compressedType) {
+    // Compress aggressively for OCR (smaller = fewer chunks = faster)
+    compressImage(dataUrl, 640, 0.4, function(compressedB64, compressedType) {
       apiOcr(compressedB64, compressedType).then(function(r) {
         if (r && r.success && r.data) {
           vState.ticketData = r.data;
