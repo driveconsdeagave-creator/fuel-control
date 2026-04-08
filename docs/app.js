@@ -175,40 +175,48 @@ function apiSave(data) {
 }
 
 // OCR: Send image in chunks via GET (bypasses CORS completely)
-// 1. Split base64 into ~5KB chunks
-// 2. Upload all chunks in parallel via GET
-// 3. Trigger ocrProcess which reassembles + calls Anthropic
-function apiOcr(base64, mediaType) {
+function apiOcr(base64, mediaType, onProgress) {
   var requestId = "r" + Date.now();
   var chunkSize = 5000;
   var chunks = [];
   for (var i = 0; i < base64.length; i += chunkSize) {
     chunks.push(base64.substr(i, chunkSize));
   }
+  var total = chunks.length;
 
-  console.log("OCR: sending " + chunks.length + " chunks (" + base64.length + " chars total)");
+  if (onProgress) onProgress("Subiendo imagen (" + total + " partes)...");
 
-  // Send all chunks in parallel
-  var chunkPromises = chunks.map(function(chunk, idx) {
-    var url = API + "?action=ocrChunk&id=" + requestId + "&i=" + idx + "&d=" + encodeURIComponent(chunk);
+  // Send chunks sequentially to avoid overwhelming GAS
+  var uploaded = 0;
+  function sendChunk(idx) {
+    if (idx >= total) {
+      if (onProgress) onProgress("Leyendo ticket con IA...");
+      // All chunks sent — trigger OCR processing
+      var processUrl = API + "?action=ocrProcess&id=" + requestId + "&n=" + total + "&mt=" + encodeURIComponent(mediaType);
+      return fetch(processUrl, { redirect: "follow" })
+        .then(function(r) { return r.json(); })
+        .catch(function(e) {
+          return { success: false, message: "Error procesando: " + e.toString() };
+        });
+    }
+
+    var url = API + "?action=ocrChunk&id=" + requestId + "&i=" + idx + "&d=" + encodeURIComponent(chunks[idx]);
     return fetch(url, { redirect: "follow" })
       .then(function(r) { return r.json(); })
-      .catch(function(e) { console.error("Chunk " + idx + " failed:", e); return null; });
-  });
+      .then(function(r) {
+        if (!r || !r.success) {
+          return { success: false, message: "Error subiendo parte " + idx };
+        }
+        uploaded++;
+        if (onProgress) onProgress("Subiendo... (" + uploaded + "/" + total + ")");
+        return sendChunk(idx + 1);
+      })
+      .catch(function(e) {
+        return { success: false, message: "Error en parte " + idx + ": " + e.toString() };
+      });
+  }
 
-  // After all chunks uploaded, trigger OCR processing
-  return Promise.all(chunkPromises).then(function(results) {
-    var allOk = results.every(function(r) { return r && r.success; });
-    if (!allOk) {
-      console.error("Some chunks failed:", results);
-      return null;
-    }
-    console.log("OCR: all chunks sent, processing...");
-    var processUrl = API + "?action=ocrProcess&id=" + requestId + "&n=" + chunks.length + "&mt=" + encodeURIComponent(mediaType);
-    return fetch(processUrl, { redirect: "follow" })
-      .then(function(r) { return r.json(); })
-      .catch(function(e) { console.error("OCR process failed:", e); return null; });
-  });
+  return sendChunk(0);
 }
 
 // ═══════════════════════════════════════
@@ -330,11 +338,17 @@ function handleVehiclePhoto(input) {
 
     // Show scanning state
     $("v-scan-status").className = "scan-status scan-scanning";
-    $("v-scan-status").innerHTML = '<div class="scan-title">Enviando a IA... (puede tardar 15-30s)</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
+    $("v-scan-status").innerHTML = '<div class="scan-title">Comprimiendo imagen...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
 
-    // Compress aggressively for OCR (smaller = fewer chunks = faster)
+    // Compress for OCR
     compressImage(dataUrl, 640, 0.4, function(compressedB64, compressedType) {
-      apiOcr(compressedB64, compressedType).then(function(r) {
+      var numChunks = Math.ceil(compressedB64.length / 5000);
+      $("v-scan-status").innerHTML = '<div class="scan-title">Subiendo ' + numChunks + ' partes... (0/' + numChunks + ')</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
+
+      apiOcr(compressedB64, compressedType, function(progress) {
+        // Progress callback
+        $("v-scan-status").innerHTML = '<div class="scan-title">' + progress + '</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
+      }).then(function(r) {
         if (r && r.success && r.data) {
           vState.ticketData = r.data;
           $("v-scan-status").className = "scan-status scan-ok";
@@ -347,9 +361,14 @@ function handleVehiclePhoto(input) {
           show("v-continue-btn");
         } else {
           $("v-scan-status").className = "scan-status";
-          $("v-scan-status").innerHTML = '<div class="scan-error">No se pudo leer el ticket. Usa entrada manual.</div>';
+          var errMsg = (r && r.message) ? r.message : "Error desconocido";
+          $("v-scan-status").innerHTML = '<div class="scan-error">Error: ' + errMsg + '</div><div style="font-size:11px;color:#8a8078;margin-top:6px">Usa entrada manual abajo</div>';
           show("v-manual-btn");
         }
+      }).catch(function(e) {
+        $("v-scan-status").className = "scan-status";
+        $("v-scan-status").innerHTML = '<div class="scan-error">Error: ' + e.toString() + '</div>';
+        show("v-manual-btn");
       });
     });
   };
