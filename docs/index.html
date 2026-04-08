@@ -185,7 +185,7 @@
       <h2 class="admin-title">Panel de Administrador</h2>
       <p class="admin-desc">Todos los datos se guardan directamente en Google Sheets. Ahi puedes ver el historial completo, crear graficas, filtrar por vehiculo, operador o fecha, y ver las alertas de rendimiento.</p>
       <p class="admin-legend"><span class="legend-green">Verde</span> = normal, <span class="legend-red">Rojo</span> = bajo rendimiento, <span class="legend-purple">Morado</span> = sospechoso.</p>
-      <a id="admin-sheets-link" href="https://docs.google.com/spreadsheets" target="_blank" rel="noopener" class="btn btn--gold btn--lg">Abrir Google Sheets</a>
+      <a id="admin-sheets-link" href="https://docs.google.com/spreadsheets/d/1sVFdHmkCRc_uP7A-TU8l70p5e4DJlM_Be8Zr-iEj97k/edit" target="_blank" rel="noopener" class="btn btn--gold btn--lg">Abrir Google Sheets</a>
       <button class="btn btn--outline mt-16" onclick="goHome()">&larr; Volver</button>
     </div>
   </div>
@@ -196,6 +196,7 @@
       <div class="success-icon">&#x2705;</div>
       <div class="success-title">Registro guardado!</div>
       <div class="success-desc">Los datos ya estan en Google Sheets</div>
+      <div id="success-alert" class="hidden"></div>
       <div class="success-hint">Puedes registrar otra carga o salir</div>
       <div class="success-actions">
         <button class="btn btn--gold" id="success-new-btn">Nueva Carga</button>
@@ -204,6 +205,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

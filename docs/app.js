@@ -54,6 +54,15 @@ var V_OPS = ["BALTAZAR PALOS","MARIO ZUNIGA AGUILERA","EMANUEL RUBIO DELGADO","A
 var T_OPS = ["RAYMUNDO RINCON","HOMERO GALLEGOS","SALVADOR CORREA","JOSE ALFREDO ROSALES","BALTAZAR PALOS","LUIS ANGEL VARELA PERALES","LUIS ANTONIO VEGA PALACIOS"];
 
 var PIN = "2835";
+var ALERT_PARAMS = {
+  "1ton": { min: 9, max: 12, label: "Pickup 1 Ton", unit: "km/L" },
+  "3ton": { min: 4, max: 7, label: "Pickup 3 Ton", unit: "km/L" },
+  "mini": { min: 11, max: 15, label: "Mini Pickup", unit: "km/L" },
+  "chico": { min: 3, max: 6, label: "Tractor Chico", unit: "L/hr" },
+  "mediano": { min: 8, max: 14, label: "Tractor Mediano", unit: "L/hr" },
+  "grande": { min: 10, max: 16, label: "Tractor Grande", unit: "L/hr" }
+};
+var SHEETS_URL = "https://docs.google.com/spreadsheets/d/1sVFdHmkCRc_uP7A-TU8l70p5e4DJlM_Be8Zr-iEj97k/edit";
 
 // ── STATE ──
 var vState = { kmPrev: null, loadingKm: false, isFirst: false, ticketData: null, geo: null };
@@ -74,11 +83,28 @@ function fN(n, d) { return Number(n).toFixed(d === undefined ? 2 : d); }
 function getGeo() {
   return new Promise(function(resolve) {
     if (!navigator.geolocation) return resolve(null);
-    navigator.geolocation.getCurrentPosition(
-      function(pos) { resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
-      function() { resolve(null); },
-      { enableHighAccuracy: true, timeout: 10000 }
+    // Use watchPosition to get best accuracy (waits for GPS lock)
+    var bestResult = null;
+    var watchId = navigator.geolocation.watchPosition(
+      function(pos) {
+        var acc = pos.coords.accuracy;
+        if (!bestResult || acc < bestResult.accuracy) {
+          bestResult = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: acc };
+        }
+        // If accuracy is under 50m, we have GPS lock
+        if (acc < 50) {
+          navigator.geolocation.clearWatch(watchId);
+          resolve(bestResult);
+        }
+      },
+      function() { resolve(bestResult); },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
+    // After 15s, use best result so far
+    setTimeout(function() {
+      navigator.geolocation.clearWatch(watchId);
+      resolve(bestResult);
+    }, 15000);
   });
 }
 
@@ -449,7 +475,8 @@ function updateVehicleSaveBtn() {
 
 function updateVehicleGeo() {
   if (vState.geo) {
-    $("v-geo").textContent = "Ubicacion: " + vState.geo.lat.toFixed(4) + ", " + vState.geo.lng.toFixed(4);
+    var acc = vState.geo.accuracy ? " (~" + Math.round(vState.geo.accuracy) + "m)" : "";
+    $("v-geo").textContent = "Ubicacion: " + vState.geo.lat.toFixed(5) + ", " + vState.geo.lng.toFixed(5) + acc;
     show("v-geo");
   }
 }
@@ -488,13 +515,15 @@ function saveVehicle() {
     geo: vState.geo
   };
 
+  var perfAlert = vState.isFirst ? null : getAlertInfo(kml, v.cat, "vehicle");
+
   showSaving();
   apiSave(data).then(function(r) {
     hideSaving();
     if (r && r.success) {
-      showSuccess("vehicle", r.queued);
+      showSuccess("vehicle", r.queued, perfAlert);
     } else {
-      alert("Error al guardar: " + (r ? r.message : "Sin respuesta del servidor"));
+      window.alert("Error al guardar: " + (r ? r.message : "Sin respuesta del servidor"));
     }
   });
 }
@@ -599,7 +628,8 @@ function updateTractorSaveBtn() {
 
 function updateTractorGeo() {
   if (tState.geo) {
-    $("t-geo").textContent = "Ubicacion: " + tState.geo.lat.toFixed(4) + ", " + tState.geo.lng.toFixed(4);
+    var acc = tState.geo.accuracy ? " (~" + Math.round(tState.geo.accuracy) + "m)" : "";
+    $("t-geo").textContent = "Ubicacion: " + tState.geo.lat.toFixed(5) + ", " + tState.geo.lng.toFixed(5) + acc;
     show("t-geo");
   }
 }
@@ -639,13 +669,15 @@ function saveTractor() {
     geo: tState.geo
   };
 
+  var perfAlert = tState.isFirst ? null : getAlertInfo(lph, t.cat, "tractor");
+
   showSaving();
   apiSave(data).then(function(r) {
     hideSaving();
     if (r && r.success) {
-      showSuccess("tractor", r.queued);
+      showSuccess("tractor", r.queued, perfAlert);
     } else {
-      alert("Error al guardar: " + (r ? r.message : "Sin respuesta del servidor"));
+      window.alert("Error al guardar: " + (r ? r.message : "Sin respuesta del servidor"));
     }
   });
 }
@@ -653,7 +685,22 @@ function saveTractor() {
 // ═══════════════════════════════════════
 // SUCCESS SCREEN
 // ═══════════════════════════════════════
-function showSuccess(type, wasQueued) {
+function getAlertInfo(metric, cat, type) {
+  var p = ALERT_PARAMS[cat];
+  if (!p || metric <= 0) return null;
+  var unit = p.unit;
+  var status, color, icon;
+  if ((type === "vehicle" && metric < p.min) || (type === "tractor" && metric < p.min)) {
+    status = "BAJO rendimiento"; color = "#d45050"; icon = "⚠️";
+  } else if ((type === "vehicle" && metric > p.max) || (type === "tractor" && metric > p.max)) {
+    status = "ALTO (revisar datos)"; color = "#a07ad4"; icon = "⚠️";
+  } else {
+    status = "Normal"; color = "#6abf6a"; icon = "✅";
+  }
+  return { status: status, color: color, icon: icon, range: p.min + "–" + p.max + " " + unit, value: metric.toFixed(2) + " " + unit, label: p.label };
+}
+
+function showSuccess(type, wasQueued, alertData) {
   showScreen("screen-success");
   if (wasQueued) {
     $("screen-success").querySelector(".success-title").textContent = "Guardado en cola!";
@@ -662,6 +709,22 @@ function showSuccess(type, wasQueued) {
     $("screen-success").querySelector(".success-title").textContent = "Registro guardado!";
     $("screen-success").querySelector(".success-desc").textContent = "Los datos ya estan en Google Sheets";
   }
+
+  // Show performance alert
+  var alertBox = $("success-alert");
+  if (alertData && alertData.status) {
+    alertBox.innerHTML = '<div style="padding:14px;background:rgba(255,255,255,0.04);border:1px solid ' + alertData.color + '33;border-radius:10px;margin-bottom:16px">' +
+      '<div style="font-size:13px;color:#8a8078;margin-bottom:6px">' + alertData.label + '</div>' +
+      '<div style="font-size:20px;font-weight:700;color:' + alertData.color + '">' + alertData.icon + ' ' + alertData.value + '</div>' +
+      '<div style="font-size:12px;color:#8a8078;margin-top:4px">Rango esperado: ' + alertData.range + '</div>' +
+      '<div style="font-size:14px;font-weight:600;color:' + alertData.color + ';margin-top:6px">' + alertData.status + '</div>' +
+      '</div>';
+    show(alertBox);
+  } else if (alertBox) {
+    alertBox.innerHTML = "";
+    hide(alertBox);
+  }
+
   $("success-new-btn").onclick = function() {
     if (type === "vehicle") {
       resetVehicleForm();
