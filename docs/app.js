@@ -174,13 +174,32 @@ function apiSave(data) {
     });
 }
 
-// OCR: Single GET request with compressed image
+// OCR: GET request with compressed image
+// If image is too large for single GET, split into 2 sequential requests
 function apiOcr(base64, mediaType) {
-  var payload = encodeURIComponent(JSON.stringify({ base64Image: base64, mediaType: mediaType }));
-  var url = API + "?action=ocr&payload=" + payload;
-  return fetch(url, { redirect: "follow" })
+  var payload = JSON.stringify({ base64Image: base64, mediaType: mediaType });
+  var encoded = encodeURIComponent(payload);
+
+  // If small enough for a single GET (under 7KB URL), send directly
+  if (encoded.length < 7000) {
+    return fetch(API + "?action=ocr&payload=" + encoded, { redirect: "follow" })
+      .then(function(r) { return r.json(); })
+      .catch(function(e) { return { success: false, message: "Error de red: " + e.toString() }; });
+  }
+
+  // Too large — split base64 in half and send as 2 requests
+  var id = "r" + Date.now();
+  var mid = Math.ceil(base64.length / 2);
+  var part1 = base64.substring(0, mid);
+  var part2 = base64.substring(mid);
+
+  return fetch(API + "?action=ocrPart&id=" + id + "&i=0&d=" + encodeURIComponent(part1), { redirect: "follow" })
     .then(function(r) { return r.json(); })
-    .catch(function(e) { console.error("OCR error:", e); return { success: false, message: e.toString() }; });
+    .then(function() {
+      return fetch(API + "?action=ocrPart&id=" + id + "&i=1&n=2&mt=" + encodeURIComponent(mediaType) + "&d=" + encodeURIComponent(part2), { redirect: "follow" });
+    })
+    .then(function(r) { return r.json(); })
+    .catch(function(e) { return { success: false, message: "Error de red: " + e.toString() }; });
 }
 
 // ═══════════════════════════════════════
@@ -305,7 +324,7 @@ function handleVehiclePhoto(input) {
     $("v-scan-status").innerHTML = '<div class="scan-title">Leyendo ticket...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
 
     // Compress and send to OCR in a single request
-    compressImage(dataUrl, 640, 0.4, function(compressedB64, compressedType) {
+    compressImage(dataUrl, 400, 0.3, function(compressedB64, compressedType) {
       apiOcr(compressedB64, compressedType).then(function(r) {
         if (r && r.success && r.data) {
           vState.ticketData = r.data;
