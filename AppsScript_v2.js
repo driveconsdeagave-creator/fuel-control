@@ -342,11 +342,19 @@ function ocrTicket(base64Image, mediaType) {
     muteHttpExceptions: true
   });
 
+  var httpCode = response.getResponseCode();
+  var rawText = response.getContentText();
+
+  // If Anthropic returned an HTTP error, show it
+  if (httpCode !== 200) {
+    return { error: "Anthropic HTTP " + httpCode + ": " + rawText.substring(0, 300) };
+  }
+
   try {
-    var result = JSON.parse(response.getContentText());
+    var result = JSON.parse(rawText);
     var text = (result.content || []).map(function(c) { return c.text || ""; }).join("");
     return JSON.parse(text.replace(/```json|```/g, "").trim());
   } catch (err) {
-    return { error: "No se pudo leer el ticket" };
+    return { error: "Parse error: " + err.toString() + " | Response: " + rawText.substring(0, 200) };
   }
 }

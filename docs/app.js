@@ -341,7 +341,7 @@ function handleVehiclePhoto(input) {
     $("v-scan-status").innerHTML = '<div class="scan-title">Comprimiendo imagen...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
 
     // Compress for OCR
-    compressImage(dataUrl, 640, 0.4, function(compressedB64, compressedType) {
+    compressImage(dataUrl, 800, 0.5, function(compressedB64, compressedType) {
       var numChunks = Math.ceil(compressedB64.length / 5000);
       $("v-scan-status").innerHTML = '<div class="scan-title">Subiendo ' + numChunks + ' partes... (0/' + numChunks + ')</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
 
@@ -361,8 +361,13 @@ function handleVehiclePhoto(input) {
           show("v-continue-btn");
         } else {
           $("v-scan-status").className = "scan-status";
-          var errMsg = (r && r.message) ? r.message : "Error desconocido";
-          $("v-scan-status").innerHTML = '<div class="scan-error">Error: ' + errMsg + '</div><div style="font-size:11px;color:#8a8078;margin-top:6px">Usa entrada manual abajo</div>';
+          var errMsg = "Error desconocido";
+          if (r) {
+            if (r.message) errMsg = r.message;
+            else if (r.data && r.data.error) errMsg = r.data.error;
+            else errMsg = JSON.stringify(r).substring(0, 200);
+          }
+          $("v-scan-status").innerHTML = '<div class="scan-error">' + errMsg + '</div><div style="font-size:11px;color:#8a8078;margin-top:6px">Usa entrada manual abajo</div>';
           show("v-manual-btn");
         }
       }).catch(function(e) {
