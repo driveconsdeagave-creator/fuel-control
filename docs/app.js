@@ -403,7 +403,6 @@ function resetVehicleForm() {
   hide("v-step2"); hide("v-step3");
   hide("v-photo-preview"); show("v-photo-empty");
   hide("v-continue-btn");
-  hide("v-manual-fields");
   $("v-photo-area").classList.remove("has-photo");
   $("v-file").value = "";
   vState = { kmPrev: null, loadingKm: false, isFirst: false, ticketData: null, geo: null };
@@ -501,10 +500,8 @@ function handleVehiclePhoto(input) {
           $("v-scan-status").innerHTML = html;
           show("v-continue-btn");
         } else if (r && r.success && r.data) {
-          // OCR partially read the ticket but missing critical fields
           $("v-scan-status").className = "scan-status";
-          $("v-scan-status").innerHTML = '<div class="scan-error">No se pudieron leer litros o total del ticket</div><div style="font-size:11px;color:#888;margin-top:6px">Usa entrada manual abajo</div>';
-          show("v-manual-btn");
+          $("v-scan-status").innerHTML = '<div class="scan-error">No se pudieron leer litros o total. Intenta otra foto.</div>';
         } else {
           $("v-scan-status").className = "scan-status";
           var errMsg = "Error desconocido";
@@ -513,55 +510,15 @@ function handleVehiclePhoto(input) {
             else if (r.data && r.data.error) errMsg = r.data.error;
             else errMsg = JSON.stringify(r).substring(0, 200);
           }
-          $("v-scan-status").innerHTML = '<div class="scan-error">' + errMsg + '</div><div style="font-size:11px;color:#888;margin-top:6px">Usa entrada manual abajo</div>';
-          show("v-manual-btn");
+          $("v-scan-status").innerHTML = '<div class="scan-error">' + errMsg + '. Intenta otra foto.</div>';
         }
       }).catch(function(e) {
         $("v-scan-status").className = "scan-status";
-        $("v-scan-status").innerHTML = '<div class="scan-error">Error: ' + e.toString() + '</div>';
-        show("v-manual-btn");
+        $("v-scan-status").innerHTML = '<div class="scan-error">Error: ' + e.toString() + '. Intenta otra foto.</div>';
       });
     });
   };
   reader.readAsDataURL(file);
-}
-
-function toggleManualEntry() {
-  var fields = $("v-manual-fields");
-  if (fields.classList.contains("hidden")) { show(fields); } else { hide(fields); }
-}
-
-function applyManualVehicle() {
-  var liters = parseFloat($("v-liters").value);
-  var price = parseFloat($("v-price").value);
-  var total = parseFloat($("v-total").value);
-  var station = $("v-station").value;
-  var fuelType = $("v-fuelType").value;
-
-  if (!liters || liters <= 0) { alert("Ingresa los litros"); return; }
-  if (!total && (!price || price <= 0)) { alert("Ingresa precio o total"); return; }
-
-  if (!total && price > 0) total = liters * price;
-  if (!price && total > 0) price = total / liters;
-
-  vState.ticketData = {
-    station: station || "Manual",
-    liters: liters,
-    totalCost: total,
-    pricePerLiter: price,
-    date: todayStr(),
-    time: nowTime(),
-    fuelType: fuelType
-  };
-
-  // Update photo area to show manual data
-  hide("v-photo-empty"); show("v-photo-preview");
-  $("v-preview-img").src = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="70" height="90" fill="%238a8078"><rect width="70" height="90" rx="8" fill="%231a1714"/><text x="35" y="50" text-anchor="middle" font-size="30">&#9981;</text></svg>');
-  $("v-scan-status").className = "scan-status scan-ok";
-  $("v-scan-status").innerHTML = '<div class="scan-title">Datos manuales</div><div class="scan-data">' + station + "<br>" + liters + ' L<br><span class="scan-cost">' + fmt$(total) + "</span></div>";
-
-  show("v-continue-btn");
-  hide("v-manual-fields");
 }
 
 function vehicleGoStep3() {
