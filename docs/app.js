@@ -292,7 +292,8 @@ function hidePinDialog() {
 function tryPin() {
   if ($("pin-input").value === PIN) {
     hidePinDialog();
-    selectRole("admin");
+    // Open Google Sheet directly
+    window.open(SHEETS_URL, "_blank");
   } else {
     show("pin-error");
     $("pin-input").classList.add("error");

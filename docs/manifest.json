@@ -4,7 +4,7 @@
   "description": "Sistema de Gestion Agricola - Control de Combustible",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#111010",
+  "background_color": "#f5f5f5",
   "theme_color": "#d4a437",
   "orientation": "portrait",
   "icons": [
