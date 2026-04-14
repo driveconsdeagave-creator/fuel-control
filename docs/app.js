@@ -714,7 +714,6 @@ function onTractorChange() {
     var hr = (r && r.lastHr !== null && r.lastHr !== undefined) ? r.lastHr : null;
     if (hr !== null) saveLocalReading(t.eco, Number(hr));
     setTractorHrPrev(hr);
-    }
   });
 }
 
