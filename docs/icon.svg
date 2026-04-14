@@ -1,27 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- White background -->
   <rect width="512" height="512" rx="80" fill="#ffffff"/>
+
   <!-- Fuel pump body -->
-  <rect x="120" y="100" width="200" height="300" rx="20" fill="#cc2222"/>
-  <!-- Screen -->
-  <rect x="148" y="135" width="144" height="100" rx="10" fill="#ffffff"/>
-  <!-- Gauge circle -->
-  <circle cx="220" cy="185" r="32" fill="none" stroke="#cc2222" stroke-width="3.5"/>
-  <line x1="220" y1="185" x2="242" y2="168" stroke="#cc2222" stroke-width="3.5" stroke-linecap="round"/>
-  <!-- Display -->
-  <rect x="160" y="260" width="120" height="40" rx="6" fill="#991111"/>
-  <text x="220" y="286" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="18" font-weight="bold">km/L</text>
-  <!-- Base -->
-  <rect x="140" y="400" width="160" height="24" rx="6" fill="#cc2222"/>
-  <rect x="110" y="416" width="220" height="16" rx="4" fill="#991111"/>
-  <!-- Nozzle arm -->
-  <rect x="320" y="160" width="36" height="14" rx="4" fill="#cc2222"/>
-  <rect x="346" y="120" width="14" height="54" rx="4" fill="#cc2222"/>
-  <path d="M 360 120 Q 400 120 400 160 L 400 260" fill="none" stroke="#cc2222" stroke-width="10" stroke-linecap="round"/>
+  <rect x="130" y="110" width="180" height="270" rx="18" fill="#cc2222"/>
+
+  <!-- Screen area (white inset) -->
+  <rect x="155" y="140" width="130" height="90" rx="8" fill="#ffffff"/>
+
+  <!-- Gauge needle inside screen -->
+  <circle cx="220" cy="185" r="28" fill="none" stroke="#cc2222" stroke-width="3"/>
+  <line x1="220" y1="185" x2="240" y2="170" stroke="#cc2222" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="220" cy="185" r="4" fill="#cc2222"/>
+
+  <!-- Digital display -->
+  <rect x="165" y="260" width="110" height="36" rx="6" fill="#8b1111"/>
+  <text x="220" y="284" text-anchor="middle" fill="#ffffff" font-family="Arial,sans-serif" font-size="16" font-weight="bold">km/L</text>
+
+  <!-- Pump base -->
+  <rect x="150" y="380" width="140" height="20" rx="4" fill="#cc2222"/>
+  <rect x="125" y="396" width="190" height="14" rx="4" fill="#8b1111"/>
+
+  <!-- Nozzle connection -->
+  <rect x="310" y="165" width="30" height="12" rx="3" fill="#cc2222"/>
+
+  <!-- Hose vertical -->
+  <rect x="334" y="130" width="12" height="47" rx="3" fill="#cc2222"/>
+
+  <!-- Hose curve -->
+  <path d="M 340 130 C 340 100, 380 100, 380 130 L 380 240" fill="none" stroke="#cc2222" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
   <!-- Nozzle tip -->
-  <rect x="392" y="260" width="16" height="40" rx="3" fill="#991111"/>
-  <!-- Drops -->
-  <ellipse cx="400" cy="318" rx="6" ry="10" fill="#cc2222" opacity="0.6"/>
-  <ellipse cx="394" cy="342" rx="4" ry="7" fill="#cc2222" opacity="0.35"/>
-  <!-- Hose detail -->
-  <circle cx="340" y="167" r="5" fill="#991111"/>
+  <rect x="374" y="240" width="12" height="50" rx="3" fill="#8b1111"/>
+  <rect x="370" y="286" width="20" height="8" rx="2" fill="#cc2222"/>
+
+  <!-- Fuel drops -->
+  <path d="M 380 308 Q 383 320 380 328 Q 377 320 380 308 Z" fill="#cc2222" opacity="0.7"/>
+  <path d="M 376 338 Q 378 346 376 352 Q 374 346 376 338 Z" fill="#cc2222" opacity="0.4"/>
+
+  <!-- Bottom text -->
+  <text x="256" y="460" text-anchor="middle" fill="#cc2222" font-family="Arial,sans-serif" font-size="28" font-weight="bold" letter-spacing="3">COMBUSTIBLE</text>
 </svg>
