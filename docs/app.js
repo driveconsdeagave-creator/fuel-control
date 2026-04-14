@@ -166,22 +166,39 @@ function updateOnlineStatus() {
   }
 }
 
+var _syncInProgress = false;
+
 function syncQueue() {
+  if (_syncInProgress) return;
   var q = getQueue();
   if (q.length === 0 || !navigator.onLine) return;
 
+  _syncInProgress = true;
   var item = q[0];
+  var itemTs = item.ts; // unique identifier for this queue entry
 
   // If this is a pending OCR item, process OCR first then save
   if (item.data.type === "vehicle_pending_ocr") {
     var p = item.data;
-    if (!p.photoB64) { q.shift(); saveQueue(q); syncQueue(); return; }
+    if (!p.photoB64) {
+      // Re-read queue to avoid overwriting concurrent additions
+      var freshQ = getQueue();
+      freshQ.shift();
+      saveQueue(freshQ);
+      _syncInProgress = false;
+      syncQueue();
+      return;
+    }
+
+    // Track OCR retry attempts to avoid permanently blocking the queue
+    if (!item.ocrRetries) item.ocrRetries = 0;
+    item.ocrRetries++;
 
     apiOcr(p.photoB64, p.photoType).then(function(r) {
-      if (r && r.success && r.data) {
+      if (r && r.success && r.data && r.data.liters > 0 && r.data.totalCost > 0) {
         var td = r.data;
         var kmDiff = p.isFirst ? 0 : (p.km - p.kmPrev);
-        var kml = kmDiff > 0 ? kmDiff / td.liters : 0;
+        var kml = (kmDiff > 0 && td.liters > 0) ? kmDiff / td.liters : 0;
         var costKm = kmDiff > 0 ? td.totalCost / kmDiff : 0;
 
         var saveData = {
@@ -197,14 +214,35 @@ function syncQueue() {
 
         return apiSave(saveData);
       }
-      return null;
+      // OCR failed or returned incomplete data
+      return { _ocrFailed: true };
     }).then(function(r) {
-      if (r && r.success) {
-        q.shift();
-        saveQueue(q);
-        if (q.length > 0) setTimeout(syncQueue, 2000);
+      _syncInProgress = false;
+      if (r && r._ocrFailed) {
+        // OCR failed — update retry count in queue; skip after 3 attempts
+        var freshQ = getQueue();
+        if (item.ocrRetries >= 3) {
+          console.warn("OCR failed 3 times for pending item, skipping:", itemTs);
+          if (freshQ.length > 0 && freshQ[0].ts === itemTs) { freshQ.shift(); }
+          saveQueue(freshQ);
+        } else {
+          // Save updated retry count
+          if (freshQ.length > 0 && freshQ[0].ts === itemTs) {
+            freshQ[0].ocrRetries = item.ocrRetries;
+          }
+          saveQueue(freshQ);
+        }
+        if (freshQ.length > 0) setTimeout(syncQueue, 5000);
+        return;
       }
-    }).catch(function() { /* retry later */ });
+      if (r && r.success) {
+        // Re-read queue to avoid overwriting concurrent additions
+        var freshQ = getQueue();
+        if (freshQ.length > 0 && freshQ[0].ts === itemTs) { freshQ.shift(); }
+        saveQueue(freshQ);
+        if (freshQ.length > 0) setTimeout(syncQueue, 2000);
+      }
+    }).catch(function() { _syncInProgress = false; /* retry later */ });
     return;
   }
 
@@ -215,13 +253,16 @@ function syncQueue() {
   fetch(url, { redirect: "follow" })
     .then(function(r) { return r.json(); })
     .then(function(r) {
+      _syncInProgress = false;
       if (r && r.success) {
-        q.shift();
-        saveQueue(q);
-        if (q.length > 0) setTimeout(syncQueue, 1000);
+        // Re-read queue to avoid overwriting concurrent additions
+        var freshQ = getQueue();
+        if (freshQ.length > 0 && freshQ[0].ts === itemTs) { freshQ.shift(); }
+        saveQueue(freshQ);
+        if (freshQ.length > 0) setTimeout(syncQueue, 1000);
       }
     })
-    .catch(function() { /* retry later */ });
+    .catch(function() { _syncInProgress = false; /* retry later */ });
 }
 
 // ═══════════════════════════════════════
@@ -449,16 +490,21 @@ function handleVehiclePhoto(input) {
       $("v-scan-status").innerHTML = '<div class="scan-title">Leyendo ticket...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
 
       apiOcr(compressedB64, compressedType).then(function(r) {
-        if (r && r.success && r.data) {
+        if (r && r.success && r.data && r.data.liters > 0 && r.data.totalCost > 0) {
           vState.ticketData = r.data;
           $("v-scan-status").className = "scan-status scan-ok";
           var html = '<div class="scan-title">Ticket leido</div><div class="scan-data">';
           if (r.data.station) html += r.data.station + "<br>";
-          html += (r.data.liters || "?") + " L<br>";
-          html += '<span class="scan-cost">$' + (r.data.totalCost || "?") + "</span>";
+          html += r.data.liters + " L<br>";
+          html += '<span class="scan-cost">' + fmt$(r.data.totalCost) + "</span>";
           html += "</div>";
           $("v-scan-status").innerHTML = html;
           show("v-continue-btn");
+        } else if (r && r.success && r.data) {
+          // OCR partially read the ticket but missing critical fields
+          $("v-scan-status").className = "scan-status";
+          $("v-scan-status").innerHTML = '<div class="scan-error">No se pudieron leer litros o total del ticket</div><div style="font-size:11px;color:#888;margin-top:6px">Usa entrada manual abajo</div>';
+          show("v-manual-btn");
         } else {
           $("v-scan-status").className = "scan-status";
           var errMsg = "Error desconocido";
@@ -914,6 +960,13 @@ function compressImage(dataUrl, maxDim, quality, callback) {
     var compressed = canvas.toDataURL("image/jpeg", quality);
     var b64 = compressed.split(",")[1];
     callback(b64, "image/jpeg");
+  };
+  img.onerror = function() {
+    // If image fails to load, fallback: use original dataUrl as base64
+    var b64 = dataUrl.split(",")[1];
+    var type = (dataUrl.match(/^data:(.*?);/) || [])[1] || "image/jpeg";
+    if (b64) { callback(b64, type); }
+    else { alert("Error al procesar la imagen. Intenta de nuevo."); }
   };
   img.src = dataUrl;
 }
