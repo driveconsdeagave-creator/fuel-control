@@ -62,7 +62,7 @@ var ALERT_PARAMS = {
   "mediano": { min: 8, max: 14, label: "Tractor Mediano", unit: "L/hr" },
   "grande": { min: 10, max: 16, label: "Tractor Grande", unit: "L/hr" }
 };
-var SHEETS_URL = "https://docs.google.com/spreadsheets/d/1sVFdHmkCRc_uP7A-TU8l70p5e4DJlM_Be8Zr-iEj97k/edit";
+var SHEETS_URL = "https://docs.google.com/spreadsheets/d/1sVFdHmkCRc_uP7A-TU8l70p5e4DJlM_Be8Zr-iEj97k/edit?gid=1888288303#gid=1888288303";
 
 // ── STATE ──
 var vState = { kmPrev: null, loadingKm: false, isFirst: false, ticketData: null, geo: null };

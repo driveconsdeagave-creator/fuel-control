@@ -1,4 +1,4 @@
-var CACHE_NAME = "combustible-v10";
+var CACHE_NAME = "combustible-v11";
 var ASSETS = [
   "./",
   "./index.html",
