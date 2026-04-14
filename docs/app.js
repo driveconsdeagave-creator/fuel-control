@@ -68,6 +68,21 @@ var SHEETS_URL = "https://docs.google.com/spreadsheets/d/1sVFdHmkCRc_uP7A-TU8l70
 var vState = { kmPrev: null, loadingKm: false, isFirst: false, ticketData: null, geo: null };
 var tState = { hrPrev: null, loadingHr: false, isFirst: false, geo: null };
 var QUEUE_KEY = "fuel_pending_queue";
+var READINGS_KEY = "fuel_last_readings"; // local cache of last km/hr per vehicle/tractor
+
+// ═══════════════════════════════════════
+// LOCAL READINGS CACHE (works offline)
+// ═══════════════════════════════════════
+function getLocalReadings() {
+  try { return JSON.parse(localStorage.getItem(READINGS_KEY)) || {}; }
+  catch(e) { return {}; }
+}
+
+function saveLocalReading(eco, value) {
+  var readings = getLocalReadings();
+  readings[eco] = value;
+  localStorage.setItem(READINGS_KEY, JSON.stringify(readings));
+}
 
 // ═══════════════════════════════════════
 // UTILITIES
@@ -362,6 +377,19 @@ function vehicleStep1Check() {
   }
 }
 
+function setVehicleKmPrev(km) {
+  if (km !== null && km !== undefined) {
+    vState.kmPrev = Number(km);
+    vState.isFirst = false;
+    $("v-km-prev-val").textContent = fN(vState.kmPrev, 0) + " km";
+    show("v-km-prev-box"); hide("v-km-first");
+  } else {
+    vState.kmPrev = null;
+    vState.isFirst = true;
+    hide("v-km-prev-box"); show("v-km-first");
+  }
+}
+
 function onVehicleChange() {
   var vid = $("v-vehicle").value;
   vehicleStep1Check();
@@ -369,22 +397,25 @@ function onVehicleChange() {
   var v = VEHICLES.find(function(x) { return x.id === vid; });
   if (!v) return;
 
-  // Fetch last km
+  hide("v-km-prev-box"); hide("v-km-first");
+
+  if (!navigator.onLine) {
+    // Offline: use local cache
+    var local = getLocalReadings()[v.eco];
+    hide("v-km-loading");
+    setVehicleKmPrev(local || null);
+    return;
+  }
+
+  // Online: fetch from Sheet, then cache locally
   vState.loadingKm = true;
-  show("v-km-loading"); hide("v-km-prev-box"); hide("v-km-first");
+  show("v-km-loading");
   apiGet({ action: "lastKm", eco: v.eco }).then(function(r) {
     vState.loadingKm = false;
     hide("v-km-loading");
-    if (r && r.lastKm !== null && r.lastKm !== undefined) {
-      vState.kmPrev = Number(r.lastKm);
-      vState.isFirst = false;
-      $("v-km-prev-val").textContent = fN(vState.kmPrev, 0) + " km";
-      show("v-km-prev-box"); hide("v-km-first");
-    } else {
-      vState.kmPrev = null;
-      vState.isFirst = true;
-      hide("v-km-prev-box"); show("v-km-first");
-    }
+    var km = (r && r.lastKm !== null && r.lastKm !== undefined) ? r.lastKm : null;
+    if (km !== null) saveLocalReading(v.eco, Number(km));
+    setVehicleKmPrev(km);
   });
 }
 
@@ -583,6 +614,7 @@ function saveVehicle() {
   apiSave(data).then(function(r) {
     hideSaving();
     if (r && r.success) {
+      saveLocalReading(v.eco, km); // cache km for offline use
       showSuccess("vehicle", r.queued, perfAlert);
     } else {
       window.alert("Error al guardar: " + (r ? r.message : "Sin respuesta del servidor"));
@@ -616,6 +648,7 @@ function saveVehicleOffline() {
     ts: Date.now()
   };
 
+  saveLocalReading(v.eco, km); // cache km for offline use
   var q = getQueue();
   q.push({ data: pending, ts: Date.now() });
   saveQueue(q);
@@ -644,6 +677,19 @@ function tractorStep1Check() {
   }
 }
 
+function setTractorHrPrev(hr) {
+  if (hr !== null && hr !== undefined) {
+    tState.hrPrev = Number(hr);
+    tState.isFirst = false;
+    $("t-hr-prev-val").textContent = fN(tState.hrPrev, 1) + " hrs";
+    show("t-hr-prev-box"); hide("t-hr-first");
+  } else {
+    tState.hrPrev = null;
+    tState.isFirst = true;
+    hide("t-hr-prev-box"); show("t-hr-first");
+  }
+}
+
 function onTractorChange() {
   var tid = $("t-tractor").value;
   tractorStep1Check();
@@ -651,20 +697,23 @@ function onTractorChange() {
   var t = TRACTORS.find(function(x) { return x.id === tid; });
   if (!t) return;
 
+  hide("t-hr-prev-box"); hide("t-hr-first");
+
+  if (!navigator.onLine) {
+    var local = getLocalReadings()[t.eco];
+    hide("t-hr-loading");
+    setTractorHrPrev(local || null);
+    return;
+  }
+
   tState.loadingHr = true;
-  show("t-hr-loading"); hide("t-hr-prev-box"); hide("t-hr-first");
+  show("t-hr-loading");
   apiGet({ action: "lastHr", eco: t.eco }).then(function(r) {
     tState.loadingHr = false;
     hide("t-hr-loading");
-    if (r && r.lastHr !== null && r.lastHr !== undefined) {
-      tState.hrPrev = Number(r.lastHr);
-      tState.isFirst = false;
-      $("t-hr-prev-val").textContent = fN(tState.hrPrev, 1) + " hrs";
-      show("t-hr-prev-box"); hide("t-hr-first");
-    } else {
-      tState.hrPrev = null;
-      tState.isFirst = true;
-      hide("t-hr-prev-box"); show("t-hr-first");
+    var hr = (r && r.lastHr !== null && r.lastHr !== undefined) ? r.lastHr : null;
+    if (hr !== null) saveLocalReading(t.eco, Number(hr));
+    setTractorHrPrev(hr);
     }
   });
 }
@@ -769,6 +818,7 @@ function saveTractor() {
   apiSave(data).then(function(r) {
     hideSaving();
     if (r && r.success) {
+      saveLocalReading(t.eco, hr); // cache hr for offline use
       showSuccess("tractor", r.queued, perfAlert);
     } else {
       window.alert("Error al guardar: " + (r ? r.message : "Sin respuesta del servidor"));
