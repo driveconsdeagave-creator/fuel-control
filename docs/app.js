@@ -273,12 +273,10 @@ function selectRole(role) {
 // PIN DIALOG
 // ═══════════════════════════════════════
 function showPinDialog() {
-  hide("screen-role"); // hide role buttons conceptually
   show("pin-dialog");
   $("pin-input").value = "";
   $("pin-input").focus();
   hide("pin-error");
-  // Hide role buttons
   document.querySelector(".role-buttons").classList.add("hidden");
 }
 
