@@ -19,9 +19,10 @@ input:focus, select:focus { border-color: #b8860b !important; outline: none; }
 .screen.active { display: block; }
 
 /* ═══ COMPANY HEADER ═══ */
-.company-header { position: absolute; top: 16px; right: 18px; text-align: right; }
-.company-logo { height: 50px; width: auto; }
-.topbar-logo { height: 32px; width: auto; }
+.company-header { position: absolute; top: 16px; left: 18px; display: flex; align-items: center; gap: 8px; }
+.company-logo { height: 36px; width: 36px; object-fit: contain; }
+.company-name { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #b8860b; line-height: 1.3; }
+.topbar-logo { height: 28px; width: 28px; object-fit: contain; }
 
 /* ═══ ROLE SELECT ═══ */
 .role-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; position: relative; }
