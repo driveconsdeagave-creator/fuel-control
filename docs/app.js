@@ -293,7 +293,8 @@ function tryPin() {
   if ($("pin-input").value === PIN) {
     hidePinDialog();
     // Open Google Sheet directly
-    window.open(SHEETS_URL, "_blank");
+    // Navigate directly (window.open gets blocked as popup)
+    window.location.href = SHEETS_URL;
   } else {
     show("pin-error");
     $("pin-input").classList.add("error");
