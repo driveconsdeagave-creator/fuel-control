@@ -156,6 +156,44 @@ function syncQueue() {
   if (q.length === 0 || !navigator.onLine) return;
 
   var item = q[0];
+
+  // If this is a pending OCR item, process OCR first then save
+  if (item.data.type === "vehicle_pending_ocr") {
+    var p = item.data;
+    if (!p.photoB64) { q.shift(); saveQueue(q); syncQueue(); return; }
+
+    apiOcr(p.photoB64, p.photoType).then(function(r) {
+      if (r && r.success && r.data) {
+        var td = r.data;
+        var kmDiff = p.isFirst ? 0 : (p.km - p.kmPrev);
+        var kml = kmDiff > 0 ? kmDiff / td.liters : 0;
+        var costKm = kmDiff > 0 ? td.totalCost / kmDiff : 0;
+
+        var saveData = {
+          type: "vehicle", date: p.date, time: p.time,
+          ecoNum: p.eco, vehicleName: p.name, vehicleYear: p.year,
+          vehicleCat: p.cat, operator: p.operator,
+          station: td.station || "", fuelType: td.fuelType || "",
+          kmPrev: p.kmPrev, kmCurr: p.km, kmDiff: kmDiff,
+          liters: td.liters, pricePerLiter: td.pricePerLiter || 0,
+          totalCost: td.totalCost, kml: kml, costPerKm: costKm,
+          isFirstRecord: p.isFirst, geo: p.geo
+        };
+
+        return apiSave(saveData);
+      }
+      return null;
+    }).then(function(r) {
+      if (r && r.success) {
+        q.shift();
+        saveQueue(q);
+        if (q.length > 0) setTimeout(syncQueue, 2000);
+      }
+    }).catch(function() { /* retry later */ });
+    return;
+  }
+
+  // Normal save item
   var payload = encodeURIComponent(JSON.stringify(item.data));
   var url = API + "?action=save&payload=" + payload;
 
@@ -165,7 +203,7 @@ function syncQueue() {
       if (r && r.success) {
         q.shift();
         saveQueue(q);
-        if (q.length > 0) setTimeout(syncQueue, 1000); // sync next
+        if (q.length > 0) setTimeout(syncQueue, 1000);
       }
     })
     .catch(function() { /* retry later */ });
@@ -273,14 +311,14 @@ function selectRole(role) {
 // PIN DIALOG
 // ═══════════════════════════════════════
 function showPinDialog() {
-  $("pin-dialog").style.display = "flex";
+  $("pin-dialog").classList.remove("hidden");
   $("pin-input").value = "";
   $("pin-input").focus();
   hide("pin-error");
 }
 
 function hidePinDialog() {
-  $("pin-dialog").style.display = "none";
+  $("pin-dialog").classList.add("hidden");
   $("pin-input").value = "";
   hide("pin-error");
 }
@@ -357,17 +395,28 @@ function handleVehiclePhoto(input) {
   var reader = new FileReader();
   reader.onload = function(ev) {
     var dataUrl = ev.target.result;
-    // Show preview
     $("v-preview-img").src = dataUrl;
     hide("v-photo-empty"); show("v-photo-preview");
     $("v-photo-area").classList.add("has-photo");
 
-    // Show scanning state
-    $("v-scan-status").className = "scan-status scan-scanning";
-    $("v-scan-status").innerHTML = '<div class="scan-title">Leyendo ticket...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
-
-    // Compress and send to OCR in a single request
+    // Compress image
     compressImage(dataUrl, 800, 0.5, function(compressedB64, compressedType) {
+      // Store compressed photo for offline use
+      vState.pendingPhotoB64 = compressedB64;
+      vState.pendingPhotoType = compressedType;
+
+      if (!navigator.onLine) {
+        // Offline: skip OCR, show message, allow save with photo for later
+        $("v-scan-status").className = "scan-status scan-ok";
+        $("v-scan-status").innerHTML = '<div class="scan-title" style="color:#b8860b">Foto guardada (sin internet)</div><div style="font-size:12px;color:#666">El ticket se leera cuando haya senal</div>';
+        show("v-continue-btn");
+        return;
+      }
+
+      // Online: do OCR now
+      $("v-scan-status").className = "scan-status scan-scanning";
+      $("v-scan-status").innerHTML = '<div class="scan-title">Leyendo ticket...</div><div class="scan-bar"><div class="scan-bar-fill"></div></div>';
+
       apiOcr(compressedB64, compressedType).then(function(r) {
         if (r && r.success && r.data) {
           vState.ticketData = r.data;
@@ -387,7 +436,7 @@ function handleVehiclePhoto(input) {
             else if (r.data && r.data.error) errMsg = r.data.error;
             else errMsg = JSON.stringify(r).substring(0, 200);
           }
-          $("v-scan-status").innerHTML = '<div class="scan-error">' + errMsg + '</div><div style="font-size:11px;color:#8a8078;margin-top:6px">Usa entrada manual abajo</div>';
+          $("v-scan-status").innerHTML = '<div class="scan-error">' + errMsg + '</div><div style="font-size:11px;color:#888;margin-top:6px">Usa entrada manual abajo</div>';
           show("v-manual-btn");
         }
       }).catch(function(e) {
@@ -466,9 +515,24 @@ function updateVehicleSaveBtn() {
   var isFirst = vState.isFirst;
   var kmDiff = kmPrev !== null ? km - kmPrev : null;
 
-  var ok = op && vid && km > 0 && td && td.liters > 0 && td.totalCost > 0 && (isFirst || (kmDiff !== null && kmDiff > 0));
-  $("v-save-btn").disabled = !ok;
-  $("v-save-btn").textContent = ok ? "Guardar" : "Completa todos los pasos";
+  var hasTicket = td && td.liters > 0 && td.totalCost > 0;
+  var hasPhoto = !!vState.pendingPhotoB64;
+  var kmOk = isFirst || (kmDiff !== null && kmDiff > 0);
+
+  if (op && vid && km > 0 && hasTicket && kmOk) {
+    $("v-save-btn").disabled = false;
+    $("v-save-btn").textContent = "Guardar";
+    $("v-save-btn").onclick = saveVehicle;
+  } else if (op && vid && km > 0 && hasPhoto && !hasTicket && kmOk) {
+    // Has photo but no OCR data (offline) — save for later
+    $("v-save-btn").disabled = false;
+    $("v-save-btn").textContent = "Guardar (se leera con senal)";
+    $("v-save-btn").onclick = saveVehicleOffline;
+  } else {
+    $("v-save-btn").disabled = true;
+    $("v-save-btn").textContent = "Completa todos los pasos";
+    $("v-save-btn").onclick = saveVehicle;
+  }
 }
 
 function updateVehicleGeo() {
@@ -524,6 +588,38 @@ function saveVehicle() {
       window.alert("Error al guardar: " + (r ? r.message : "Sin respuesta del servidor"));
     }
   });
+}
+
+// Save vehicle offline: store photo + km, OCR later when online
+function saveVehicleOffline() {
+  var vid = $("v-vehicle").value;
+  var v = VEHICLES.find(function(x) { return x.id === vid; });
+  var km = Number($("v-km").value);
+  if (!v || !km) return;
+
+  var pending = {
+    type: "vehicle_pending_ocr",
+    photoB64: vState.pendingPhotoB64 || null,
+    photoType: vState.pendingPhotoType || "image/jpeg",
+    km: km,
+    kmPrev: vState.kmPrev || 0,
+    isFirst: !!vState.isFirst,
+    vehicleId: vid,
+    eco: v.eco,
+    name: v.name,
+    year: v.year,
+    cat: v.cat,
+    operator: $("v-operator").value,
+    date: todayStr(),
+    time: nowTime(),
+    geo: vState.geo,
+    ts: Date.now()
+  };
+
+  var q = getQueue();
+  q.push({ data: pending, ts: Date.now() });
+  saveQueue(q);
+  showSuccess("vehicle", true, null);
 }
 
 // ═══════════════════════════════════════
