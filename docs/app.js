@@ -273,18 +273,16 @@ function selectRole(role) {
 // PIN DIALOG
 // ═══════════════════════════════════════
 function showPinDialog() {
-  show("pin-dialog");
+  $("pin-dialog").style.display = "flex";
   $("pin-input").value = "";
   $("pin-input").focus();
   hide("pin-error");
-  document.querySelector(".role-buttons").classList.add("hidden");
 }
 
 function hidePinDialog() {
-  hide("pin-dialog");
+  $("pin-dialog").style.display = "none";
   $("pin-input").value = "";
   hide("pin-error");
-  document.querySelector(".role-buttons").classList.remove("hidden");
 }
 
 function tryPin() {

@@ -41,15 +41,18 @@
           <div><div class="role-btn-title">Administrador</div><div class="role-btn-desc">Ver Google Sheets</div></div>
         </button>
       </div>
-      <!-- PIN dialog -->
-      <div id="pin-dialog" class="pin-dialog hidden">
-        <div class="pin-label">PIN de administrador</div>
-        <input type="password" id="pin-input" inputmode="numeric" maxlength="6" placeholder="----" class="pin-input" onkeydown="if(event.key==='Enter')tryPin()">
-        <div id="pin-error" class="pin-error hidden">PIN incorrecto</div>
-        <div class="pin-actions">
-          <button class="btn btn--outline" onclick="hidePinDialog()">Cancelar</button>
-          <button class="btn btn--gold" onclick="tryPin()">Entrar</button>
-        </div>
+    </div>
+  </div>
+
+  <!-- PIN dialog (overlay, fuera de role-container) -->
+  <div id="pin-dialog" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:200">
+    <div style="background:#fff;border-radius:16px;padding:28px;width:90%;max-width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+      <div style="text-align:center;font-size:13px;color:#666;margin-bottom:16px">PIN de administrador</div>
+      <input type="password" id="pin-input" inputmode="numeric" maxlength="6" placeholder="----" style="width:100%;padding:14px;border:2px solid #ddd;border-radius:10px;font-size:28px;text-align:center;letter-spacing:8px;outline:none;font-family:inherit" onkeydown="if(event.key==='Enter')tryPin()" onfocus="this.style.borderColor='#b8860b'" onblur="this.style.borderColor='#ddd'">
+      <div id="pin-error" class="hidden" style="text-align:center;color:#d45050;font-size:13px;margin-top:8px">PIN incorrecto</div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button onclick="hidePinDialog()" style="flex:1;padding:13px;border-radius:10px;border:1.5px solid #ddd;background:#fff;color:#777;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Cancelar</button>
+        <button onclick="tryPin()" style="flex:1;padding:13px;border-radius:10px;border:none;background:linear-gradient(135deg,#b8860b,#d4a437);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Entrar</button>
       </div>
     </div>
   </div>
